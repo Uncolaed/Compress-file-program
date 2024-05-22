@@ -74,10 +74,7 @@
     <IncludePath>C:\SDL2-2.26.3\include;$(IncludePath)</IncludePath>
     <LibraryPath>C:\SDL2-2.26.3\lib\x64;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <IncludePath>C:\SDL2-2.26.3\include;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\SDL2-2.26.3\lib\x86;$(LibraryPath)</LibraryPath>
-  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
