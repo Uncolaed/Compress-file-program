@@ -21,7 +21,7 @@
 
 #define MAX_LEVELS 2
 #define FILE_SIZE 1024LL * 1024LL *102ll // 2 GB in bytes
-#define BUFFER_SIZE 1000000ll // 1 MB buffer size
+#define BUFFER_SIZE 1024LL*1024LL // 1 MB buffer size
 #define Bit_compression_size 8
 #define MAX_HUFFMAN_CODE_SIZE 256 // Define the maximum size of a Huffman code
 
@@ -30,8 +30,8 @@
 // to use fseeko and ftello on windows due to fseek and ftell only being able to take long numbers 
 #ifdef _WIN32
 
-    #define fseeko _fseeki64
-    #define ftello _ftelli64
+#define fseeko _fseeki64
+#define ftello _ftelli64
 #else
 #include <stdio.h>
 #endif
@@ -39,45 +39,45 @@
 // thermal pooling to limit the number of threads to the number of cores in the system
 // this is to avoid the overheat of creating too many threads
 //uses library from queue and condition variable to create a thread pool
-class ThreadPool 
+class ThreadPool
 {
 public:
-    ThreadPool(size_t numThreads) 
+    ThreadPool(size_t numThreads)
     {
         // create threads and assign them to the vector
-        for (size_t i = 0; i < numThreads; ++i) 
+        for (size_t i = 0; i < numThreads; ++i)
         {
-            workers.emplace_back([this] 
-            {
-                while (true) 
+            workers.emplace_back([this]
                 {
-                    std::function<void()> task;
+                    while (true)
                     {
-                        // lock the queue and wait for the condition to be true
-                        std::unique_lock<std::mutex> lock(queueMutex);
-                        condition.wait(lock, [this] { return stop || !tasks.empty(); });
-                        if (stop && tasks.empty()) return;
-                        task = std::move(tasks.front());
-                        tasks.pop();
+                        std::function<void()> task;
+                        {
+                            // lock the queue and wait for the condition to be true
+                            std::unique_lock<std::mutex> lock(queueMutex);
+                            condition.wait(lock, [this] { return stop || !tasks.empty(); });
+                            if (stop && tasks.empty()) return;
+                            task = std::move(tasks.front());
+                            tasks.pop();
+                        }
+                        task();
                     }
-                    task();
-                }
-            });
+                });
         }
     }
 
     // enqueue the task to the thread pool
     template<class F, class... Args>
-    auto enqueue(F&& f, Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type> 
+    auto enqueue(F&& f, Args&&... args) -> std::future<typename std::result_of<F(Args...)>::type>
     {
         using return_type = typename std::result_of<F(Args...)>::type;
 
         // create a task and assign it to the thread pool
 
         auto task = std::make_shared<std::packaged_task<return_type()>>
-        (
-            std::bind(std::forward<F>(f), std::forward<Args>(args)...)
-        );
+            (
+                std::bind(std::forward<F>(f), std::forward<Args>(args)...)
+            );
 
         std::future<return_type> res = task->get_future();
         {
@@ -89,7 +89,7 @@ public:
         return res;
     }
 
-    ~ThreadPool() 
+    ~ThreadPool()
     {
         {
             std::unique_lock<std::mutex> lock(queueMutex);
@@ -109,14 +109,14 @@ private:
 
 
 
-                          // graphics 
+// graphics 
 
 CC212SGL graphics;
 
 
-   // Loading bar structure
+// Loading bar structure
 
-struct LoadingBar 
+struct LoadingBar
 {
     int x, y, width, height;
     float progress;
@@ -131,7 +131,7 @@ LoadingBar fileGenBar = { 100, 180, 400, 20, 0.0f, "Generating Random Text File"
 
 // draw empty loading bars
 
-void drawLoadingBar(LoadingBar* bar) 
+void drawLoadingBar(LoadingBar* bar)
 {
     graphics.setDrawingColor(WHITE);
     graphics.drawRectangle(bar->x, bar->y, bar->width, bar->height);
@@ -146,9 +146,9 @@ void drawLoadingBar(LoadingBar* bar)
     graphics.drawText(bar->x + bar->width + 10, bar->y, progressText);
 }
 
-    // update loading bars 
+// update loading bars 
 
-void updateLoadingBar(LoadingBar* bar, float progress) 
+void updateLoadingBar(LoadingBar* bar, float progress)
 {
     bar->progress = progress;
     graphics.beginDraw();
@@ -161,7 +161,7 @@ void updateLoadingBar(LoadingBar* bar, float progress)
 
 // Function to show completion screen after compression
 
-void showCompletionScreen(const char* outputFilename) 
+void showCompletionScreen(const char* outputFilename)
 {
     graphics.beginDraw();
     graphics.fillScreen(BLACK);
@@ -186,7 +186,7 @@ void loadIntro()
 
 
 // Function to show the welcome screen with an intro image
-void showWelcomeScreen() 
+void showWelcomeScreen()
 {
     graphics.beginDraw();
     graphics.fillScreen(BLACK);
@@ -199,73 +199,17 @@ void showWelcomeScreen()
 
 // Define a structure for the Huffman code lookup table
 
-typedef struct 
+typedef struct
 {
     char* codes[256];
-    
+
 }HuffmanCodeTable;
-
-
-
-
-// create a text file with random data 
-void generateRandomTextFile(const char* filename, long long size, LoadingBar* bar)
-{
-    FILE* file = fopen(filename, "w+");
-    if (file == NULL) 
-    {
-        printf("Error opening file.\n");
-        return;
-    }
-
-    srand(time(NULL));
-    long long bytesWritten = 0;
-    int totalSteps = size / BUFFER_SIZE + 1;
-    int step = 0;
-
-    auto generateChunk = [&](long long chunkSize) 
-        {
-        char buffer[BUFFER_SIZE];
-        for (int i = 0; i < chunkSize; i++) 
-        {
-            buffer[i] = (rand() % 95) + 32; // Generate printable ASCII characters (32-126)
-        }
-        fwrite(buffer, 1, chunkSize, file);
-        };
-
-    // Create multiple threads to generate the file
-    std::vector<std::thread> threads;
-    while (bytesWritten < size) {
-        long long bytesToWrite = BUFFER_SIZE;
-        if (size - bytesWritten < BUFFER_SIZE) {
-            bytesToWrite = size - bytesWritten;
-        }
-
-        threads.emplace_back(generateChunk, bytesToWrite);
-        bytesWritten += bytesToWrite;
-
-        // Update the loading bar
-        updateLoadingBar(bar, static_cast<float>(++step) / totalSteps);
-    }
-
-    for (auto& th : threads) 
-    {
-        if (th.joinable()) 
-        {
-            th.join();
-        }
-    }
-
-    fclose(file);
-    printf("File '%s' generated with size %ld bytes.\n", filename, size);
-}
-
 
 
 //Note : this Part was made by Omar Saleh
 
 // Structure for a node in the binary tree
-struct TreeNode 
+struct TreeNode
 {
     int frequency;
     char data;
@@ -284,10 +228,10 @@ struct PQNode
 
 
 // Function to read the user-specified text file and generate the frequency table modified to use buffer
-void generateFrequencyTable(const char* filename, int* frequencyTable, LoadingBar* bar) 
+void generateFrequencyTable(const char* filename, int* frequencyTable, LoadingBar* bar)
 {
     FILE* file = fopen(filename, "rb");
-    if (file == NULL) 
+    if (file == NULL)
     {
         printf("Error opening file.\n");
         return;
@@ -295,7 +239,7 @@ void generateFrequencyTable(const char* filename, int* frequencyTable, LoadingBa
 
     fseeko(file, 0, SEEK_END);
     long long fileSize = ftello(file);
-    if (fileSize == 0) 
+    if (fileSize == 0)
     {
         printf("The file is empty.\n");
         fclose(file);
@@ -303,7 +247,14 @@ void generateFrequencyTable(const char* filename, int* frequencyTable, LoadingBa
     }
     fseeko(file, 0, SEEK_SET);
 
-    char buffer[BUFFER_SIZE];
+    char* buffer = (char*)malloc(BUFFER_SIZE);
+    if (buffer == NULL)
+    {
+        printf("Memory allocation failed.\n");
+        fclose(file);
+        return;
+    }
+
     size_t bytesRead;
     long long totalSteps = fileSize / BUFFER_SIZE + 1;  // Correct calculation of total steps
     int step = 0;
@@ -312,33 +263,42 @@ void generateFrequencyTable(const char* filename, int* frequencyTable, LoadingBa
     ThreadPool pool(std::thread::hardware_concurrency());
     std::mutex mtx;
 
-    while ((bytesRead = fread(buffer, 1, BUFFER_SIZE, file)) > 0) 
+    while ((bytesRead = fread(buffer, 1, BUFFER_SIZE, file)) > 0)
     {
-        char* chunk = new char[bytesRead];
+        char* chunk = (char*)malloc(bytesRead);
+        if (chunk == NULL)
+        {
+            printf("Memory allocation failed.\n");
+            free(buffer);
+            fclose(file);
+            return;
+        }
         memcpy(chunk, buffer, bytesRead);
 
-        pool.enqueue([chunk, bytesRead, &frequencyTable, &mtx] 
+        pool.enqueue([chunk, bytesRead, &frequencyTable, &mtx]
             {
-            int localFrequencyTable[256] = { 0 };
-            for (size_t i = 0; i < bytesRead; i++) 
-            {
-                unsigned char c = chunk[i];
-                localFrequencyTable[c]++;
-            }
-            delete[] chunk;
+                int localFrequencyTable[256] = { 0 };
+                for (size_t i = 0; i < bytesRead; i++)
+                {
+                    unsigned char c = chunk[i];
+                    localFrequencyTable[c]++;
+                }
+                delete[] chunk;
 
-            std::lock_guard<std::mutex> lock(mtx);
-            for (int i = 0; i < 256; i++) 
-            {
-                frequencyTable[i] += localFrequencyTable[i];
-            }
+                std::lock_guard<std::mutex> lock(mtx);
+                for (int i = 0; i < 256; i++)
+                {
+                    frequencyTable[i] += localFrequencyTable[i];
+                }
             });
 
-        updateLoadingBar(bar, static_cast<float>(++step) / totalSteps);
+        //updateLoadingBar(bar, static_cast<float>(++step) / totalSteps);
     }
 
+    free(buffer);
     fclose(file);
 }
+
 
 
 
@@ -367,7 +327,7 @@ void insertPQNode(PQNode** head, PQNode* newNode)
         newNode->next = *head;
         *head = newNode;
     }
-    else 
+    else
     {
         current = *head;
         while (current->next != NULL && current->next->treeNode->frequency < newNode->treeNode->frequency)
@@ -381,7 +341,7 @@ void insertPQNode(PQNode** head, PQNode* newNode)
 
 // Function to remove the first node from the priority queue
 
-PQNode* removePQNode(PQNode** head) 
+PQNode* removePQNode(PQNode** head)
 {
     PQNode* temp = *head;
     *head = (*head)->next;
@@ -457,23 +417,23 @@ TreeNode* buildHuffmanTree(int* frequencyTable)
 
 
 // Function build a table for each character and its huffmancode
-void buildHuffmanCodeTable(TreeNode* root, int arr[], int top, HuffmanCodeTable* table) 
+void buildHuffmanCodeTable(TreeNode* root, int arr[], int top, HuffmanCodeTable* table)
 {
 
-    if (root->left) 
+    if (root->left)
     {
         arr[top] = 0;
         buildHuffmanCodeTable(root->left, arr, top + 1, table);
     }
-    if (root->right) 
+    if (root->right)
     {
         arr[top] = 1;
         buildHuffmanCodeTable(root->right, arr, top + 1, table);
     }
-    if (root->left == NULL && root->right == NULL) 
+    if (root->left == NULL && root->right == NULL)
     {
         char* code = (char*)malloc(top + 1);
-        for (int i = 0; i < top; i++) 
+        for (int i = 0; i < top; i++)
         {
             code[i] = '0' + arr[i];
         }
@@ -487,7 +447,7 @@ void buildHuffmanCodeTable(TreeNode* root, int arr[], int top, HuffmanCodeTable*
 HuffmanCodeTable* generateHuffmanCodeTable(TreeNode* root)
 {
     HuffmanCodeTable* table = (HuffmanCodeTable*)malloc(sizeof(HuffmanCodeTable));
-    for (int i = 0; i < 256; i++) 
+    for (int i = 0; i < 256; i++)
     {
         table->codes[i] = NULL;
     }
@@ -499,9 +459,9 @@ HuffmanCodeTable* generateHuffmanCodeTable(TreeNode* root)
 
 
 // save huffman tree and code table
-void saveHuffmanTree(TreeNode* node, FILE* file) 
+void saveHuffmanTree(TreeNode* node, FILE* file)
 {
-    if (node == NULL) 
+    if (node == NULL)
     {
         fputc('0', file); // NULL marker
         return;
@@ -514,10 +474,10 @@ void saveHuffmanTree(TreeNode* node, FILE* file)
 }
 
 // Function to save the Huffman code table to the .dat file
-void saveHuffmanTreeAndCodeTable(TreeNode* root, HuffmanCodeTable* table, const char* filename) 
+void saveHuffmanTreeAndCodeTable(TreeNode* root, HuffmanCodeTable* table, const char* filename)
 {
     FILE* file = fopen(filename, "wb");
-    if (file == NULL) 
+    if (file == NULL)
     {
         printf("Error opening file to save Huffman tree and code table.\n");
         return;
@@ -527,9 +487,9 @@ void saveHuffmanTreeAndCodeTable(TreeNode* root, HuffmanCodeTable* table, const 
     saveHuffmanTree(root, file);
 
     // Save Huffman code tabl
-    for (int i = 0; i < 256; i++) 
+    for (int i = 0; i < 256; i++)
     {
-        if (table->codes[i] != NULL) 
+        if (table->codes[i] != NULL)
         {
             fputc('1', file); // Non-NULL marker
             fputc((char)i, file);
@@ -537,7 +497,7 @@ void saveHuffmanTreeAndCodeTable(TreeNode* root, HuffmanCodeTable* table, const 
             fwrite(&length, sizeof(int), 1, file);
             fwrite(table->codes[i], sizeof(char), length, file);
         }
-        else 
+        else
         {
             fputc('0', file); // NULL marker
         }
@@ -548,10 +508,10 @@ void saveHuffmanTreeAndCodeTable(TreeNode* root, HuffmanCodeTable* table, const 
 
 // load huffman tree and code table
 
-TreeNode* loadHuffmanTree(FILE* file) 
+TreeNode* loadHuffmanTree(FILE* file)
 {
-    if (fgetc(file) == '0') 
-    { 
+    if (fgetc(file) == '0')
+    {
         return NULL;
     }
     TreeNode* node = (TreeNode*)malloc(sizeof(TreeNode));
@@ -563,17 +523,17 @@ TreeNode* loadHuffmanTree(FILE* file)
 }
 
 // Function to load the Huffman code table from the .dat file
-HuffmanCodeTable* loadHuffmanCodeTable(FILE* file) 
+HuffmanCodeTable* loadHuffmanCodeTable(FILE* file)
 {
     HuffmanCodeTable* table = (HuffmanCodeTable*)malloc(sizeof(HuffmanCodeTable));
-    for (int i = 0; i < 256; i++) 
+    for (int i = 0; i < 256; i++)
     {
         table->codes[i] = NULL;
     }
 
-    for (int i = 0; i < 256; i++) 
+    for (int i = 0; i < 256; i++)
     {
-        if (fgetc(file) == '1') 
+        if (fgetc(file) == '1')
         { // Non-NULL marker
             char index = fgetc(file);
             int length;
@@ -588,11 +548,11 @@ HuffmanCodeTable* loadHuffmanCodeTable(FILE* file)
 }
 
 //function to free huffman table
-void freeHuffmanCodeTable(HuffmanCodeTable* table) 
+void freeHuffmanCodeTable(HuffmanCodeTable* table)
 {
-    for (int i = 0; i < 256; i++) 
+    for (int i = 0; i < 256; i++)
     {
-        if (table->codes[i] != NULL) 
+        if (table->codes[i] != NULL)
         {
             free(table->codes[i]);
         }
@@ -602,9 +562,9 @@ void freeHuffmanCodeTable(HuffmanCodeTable* table)
 
 //function to free nodes in the Huffman tree
 
-void freeHuffmanTree(TreeNode* node) 
+void freeHuffmanTree(TreeNode* node)
 {
-    if (node != NULL) 
+    if (node != NULL)
     {
         freeHuffmanTree(node->left);
         freeHuffmanTree(node->right);
@@ -619,43 +579,43 @@ void freeHuffmanTree(TreeNode* node)
 
 // dot file 
 
-void generateDot(TreeNode* root, FILE* stream, int level) 
+void generateDot(TreeNode* root, FILE* stream, int level)
 {
-    if (root == NULL) 
+    if (root == NULL)
     {
         return;
     }
 
     unsigned long id = (unsigned long)root;
 
-    if (root->left) 
+    if (root->left)
     {
         unsigned long left_id = (unsigned long)root->left;
         fprintf(stream, "    \"%lu\" -> \"%lu\";\n", id, left_id);
         generateDot(root->left, stream, level + 1);
     }
-    if (root->right) 
+    if (root->right)
     {
         unsigned long right_id = (unsigned long)root->right;
         fprintf(stream, "    \"%lu\" -> \"%lu\";\n", id, right_id);
         generateDot(root->right, stream, level + 1);
     }
 
-    if (root->left == NULL && root->right == NULL) 
+    if (root->left == NULL && root->right == NULL)
     {
         fprintf(stream, "    \"%lu\" [label=\"%c(%d)\", shape=ellipse, style=filled, fillcolor=lightblue];\n", id, root->data, root->frequency);
     }
-    else 
+    else
     {
         fprintf(stream, "    \"%lu\" [label=\"%d\", shape=circle];\n", id, root->frequency);
     }
 }
 
-void createDotFile(TreeNode* root, const char* filename) 
+void createDotFile(TreeNode* root, const char* filename)
 {
     printf("Creating dot file: %s\n", filename); // Debug statement
     FILE* file = fopen(filename, "w");
-    if (file == NULL) 
+    if (file == NULL)
     {
         perror("Failed to open file");
         return;
@@ -679,22 +639,22 @@ void createDotFile(TreeNode* root, const char* filename)
 
 // Function to get the output filename by appending "_compressed" to the input filename
 
-void getOutputFilename(const char* inputFilename, char* outputFilename) 
+void getOutputFilename(const char* inputFilename, char* outputFilename)
 {
     strcpy(outputFilename, inputFilename);
     char* dot = strrchr(outputFilename, '.');
-    if (dot) 
+    if (dot)
     {
         *dot = '\0'; // Remove the extension
     }
-    strcat(outputFilename, "_compressed.com");
+    strcat(outputFilename, "_compressed.txt");
 }
 
-void getOutputdecompress(const char* inputFilename, char* outputFilename) 
+void getOutputdecompress(const char* inputFilename, char* outputFilename)
 {
     strcpy(outputFilename, inputFilename);
     char* dot = strrchr(outputFilename, '_');
-    if (dot) 
+    if (dot)
     {
         *dot = '\0'; // Remove the extension
     }
@@ -704,7 +664,7 @@ void getOutputdecompress(const char* inputFilename, char* outputFilename)
 
 
 // Function to check if the input filename is a text file
-bool isTextFile(const char* filename) 
+bool isTextFile(const char* filename)
 {
     const char* dot = strrchr(filename, '.');
     return dot && strcmp(dot, ".txt") == 0;
@@ -714,24 +674,24 @@ bool isTextFile(const char* filename)
 bool isComFile(const char* filename)
 {
     const char* dot = strrchr(filename, '.');
-    return dot && strcmp(dot, ".com") == 0;
+    return dot && strcmp(dot, ".txt") == 0;
 }
 
 // Function to get the .dat filename by appending ".dat" to the input filename
-void getComFilename(const char* filename, char* ComFilename) 
+void getComFilename(const char* filename, char* ComFilename)
 {
     strcpy(ComFilename, filename);
 
     // Check if the filename ends with "_compressed.txt"
-    char* compressedExt = strstr(ComFilename, "_compressed.com");
-    if (compressedExt != NULL && strcmp(compressedExt, "_compressed.com") == 0) 
+    char* compressedExt = strstr(ComFilename, "_compressed.txt");
+    if (compressedExt != NULL && strcmp(compressedExt, "_compressed.txt") == 0)
     {
         *compressedExt = '\0'; // Remove "_compressed.txt"
     }
     else {
-        // Check if the filename ends with ".com"
+        // Check if the filename ends with ".txt"
         char* txtExt = strrchr(ComFilename, '.');
-        if (txtExt != NULL && strcmp(txtExt, ".txt") == 0) 
+        if (txtExt != NULL && strcmp(txtExt, ".txt") == 0)
         {
             *txtExt = '\0'; // Remove ".txt"
         }
@@ -740,40 +700,226 @@ void getComFilename(const char* filename, char* ComFilename)
     strcat(ComFilename, ".cod");
 }
 
-
-
-
-// Function to compress the input file and save the compressed data to the output file
-
-unsigned char bitsToReadableAsciiChar(const char* bits)
-{
-    unsigned char value = 0;
-    for (int i = 0; i < Bit_compression_size; i++)
+// Function to get the padding bits filename
+void getPaddingFilename(const char* filename, char* paddingFilename) {
+    strcpy(paddingFilename, filename);
+    // Check if the filename ends with "_compressed.txt"
+    char* compressedExt = strstr(paddingFilename, "_compressed.txt");
+    if (compressedExt != NULL && strcmp(compressedExt, "_compressed.txt") == 0)
     {
-        value <<= 1;
-        if (bits[i] == '1')
+        *compressedExt = '\0'; // Remove "_compressed.txt"
+    }
+    else {
+        // Check if the filename ends with ".txt"
+        char* txtExt = strrchr(paddingFilename, '.');
+        if (txtExt != NULL && strcmp(txtExt, ".txt") == 0)
         {
+            *txtExt = '\0'; // Remove ".txt"
+        }
+    }
+    strcat(paddingFilename, "_padding.txt");
+}
+
+// Function to save the number of padding bits to a file
+void savePaddingBits(const char* filename, unsigned char paddingBits) {
+    char paddingFilename[1024];
+    getPaddingFilename(filename, paddingFilename);
+    FILE* paddingFile = fopen(paddingFilename, "w");
+    if (paddingFile) {
+        fprintf(paddingFile, "%u", paddingBits);
+        fclose(paddingFile);
+    }
+    else {
+        printf("Error opening padding bits file.\n");
+    }
+}
+
+// Function to read the number of padding bits from a file
+unsigned char readPaddingBits(const char* filename) {
+    char paddingFilename[1024];
+    getPaddingFilename(filename, paddingFilename);
+    FILE* paddingFile = fopen(paddingFilename, "r");
+    unsigned char paddingBits = 0;
+    if (paddingFile) {
+        fscanf(paddingFile, "%hhu", &paddingBits);
+        fclose(paddingFile);
+    }
+    else {
+        printf("Error opening padding bits file.\n");
+    }
+    return paddingBits;
+}
+
+
+
+
+//unsigned char bitsToReadableAsciiChar(const char* bits) {
+//    unsigned char value = 0;
+//    for (int i = 0; i < Bit_compression_size; i++) {
+//        value <<= 1;
+//        if (bits[i] == '1') {
+//            value |= 1;
+//        }
+//    }
+//    return value;
+//}
+//
+//void compressFile_intermediate(const char* inputFilename, TreeNode* root, HuffmanCodeTable* table, LoadingBar* bar) {
+//    char outputFilename[1024];
+//    getOutputFilename(inputFilename, outputFilename);
+//
+//    FILE* inputFile = fopen(inputFilename, "rb");
+//    if (inputFile == NULL) {
+//        printf("Error opening input file.\n");
+//        return;
+//    }
+//
+//    FILE* outputFile = fopen(outputFilename, "wb");
+//    if (outputFile == NULL) {
+//        printf("Error opening output file.\n");
+//        fclose(inputFile);
+//        return;
+//    }
+//
+//    // Generate a unique .dat file name based on the input file name
+//    char ComFilename[1024];
+//    getComFilename(inputFilename, ComFilename);
+//
+//    // Save Huffman tree and code table to the .dat file
+//    FILE* ComFile = fopen(ComFilename, "wb");
+//    if (ComFile == NULL) {
+//        printf("Error opening .dat file to save Huffman tree and code table.\n");
+//        fclose(inputFile);
+//        fclose(outputFile);
+//        return;
+//    }
+//    saveHuffmanTreeAndCodeTable(root, table, ComFilename);
+//    fclose(ComFile);
+//
+//    // Create a .txt file to store the number of padding bits
+//    char paddingFilename[1024];
+//    getPaddingFilename(inputFilename, paddingFilename);
+//    FILE* paddingFile = fopen(paddingFilename, "w");
+//    if (paddingFile == NULL) {
+//        printf("Error opening padding bits file.\n");
+//        fclose(inputFile);
+//        fclose(outputFile);
+//        return;
+//    }
+//
+//    char* buffer = (char*)malloc(BUFFER_SIZE);
+//    if (!buffer) {
+//        printf("Memory allocation failed.\n");
+//        fclose(inputFile);
+//        fclose(outputFile);
+//        fclose(paddingFile);
+//        return;
+//    }
+//
+//    size_t bytesRead;
+//    fseeko(inputFile, 0, SEEK_END);
+//    long long fileSize = ftello(inputFile);
+//    fseeko(inputFile, 0, SEEK_SET);
+//
+//    // for loading bar 
+//    int totalSteps = fileSize / BUFFER_SIZE + 1;
+//    int step = 0;
+//
+//    unsigned char paddingBits = 0;
+//
+//    ThreadPool pool(std::thread::hardware_concurrency());
+//    std::mutex mtx;
+//
+//    while ((bytesRead = fread(buffer, 1, BUFFER_SIZE, inputFile)) > 0) {
+//        char* chunk = new char[bytesRead];
+//        memcpy(chunk, buffer, bytesRead);
+//
+//        pool.enqueue([chunk, bytesRead, &outputFile, &table, &mtx, &paddingBits] {
+//            std::string localCompressed;
+//            char bitBuffer[Bit_compression_size + 1];
+//            bitBuffer[Bit_compression_size] = '\0';
+//            int bitIndex = 0;
+//
+//            for (size_t i = 0; i < bytesRead; i++) {
+//                unsigned char c = chunk[i];
+//                const char* code = table->codes[c];
+//                if (code != NULL) {
+//                    for (size_t j = 0; j < strlen(code); j++) {
+//                        bitBuffer[bitIndex] = code[j];
+//                        bitIndex++;
+//                        if (bitIndex == Bit_compression_size) {
+//                            unsigned char byte = bitsToReadableAsciiChar(bitBuffer);
+//                            localCompressed.push_back(byte);
+//                            bitIndex = 0;
+//                        }
+//                    }
+//                }
+//            }
+//            std::lock_guard<std::mutex> lock(mtx);
+//
+//            // Add padding bits
+//            if (bitIndex > 0) {
+//                paddingBits = Bit_compression_size - bitIndex;
+//                for (int i = bitIndex; i < Bit_compression_size; i++) {
+//                    bitBuffer[i] = '0';
+//                }
+//                unsigned char byte = bitsToReadableAsciiChar(bitBuffer);
+//                localCompressed.push_back(byte);
+//            }
+//
+//            delete[] chunk;
+//            fwrite(localCompressed.data(), sizeof(unsigned char), localCompressed.size(), outputFile);
+//            });
+//
+//        //updateLoadingBar(bar, static_cast<float>(++step) / totalSteps);
+//    }
+//
+//    pool.~ThreadPool();
+//
+//    // Write the number of padding bits to the .txt file
+//    fprintf(paddingFile, "%u", paddingBits);
+//
+//    free(buffer);
+//    fclose(inputFile);
+//    fclose(outputFile);
+//    fclose(paddingFile);
+//
+//    printf("File '%s' compressed to '%s'.\n", inputFilename, outputFilename);
+//    //showCompletionScreen(outputFilename);
+//}
+//
+//// byte to bits
+//void byteToBits(unsigned char byte, char* bits) {
+//    for (int i = 0; i < Bit_compression_size; i++) {
+//		bits[i] = (byte & (1 << (Bit_compression_size - i - 1))) ? '1' : '0';
+//	}
+//}
+
+// version 2 of compress file function
+
+unsigned char bitsToReadableAsciiChar(const char* bits) {
+    unsigned char value = 0;
+    for (int i = 0; i < Bit_compression_size; i++) {
+        value <<= 1;
+        if (bits[i] == '1') {
             value |= 1;
         }
     }
     return value;
 }
 
-void compressFile_intermediate(const char* inputFilename, TreeNode* root, HuffmanCodeTable* table, LoadingBar* bar) 
-{
+void compressFile_intermediate(const char* inputFilename, TreeNode* root, HuffmanCodeTable* table, LoadingBar* bar) {
     char outputFilename[1024];
     getOutputFilename(inputFilename, outputFilename);
 
     FILE* inputFile = fopen(inputFilename, "rb");
-    if (inputFile == NULL) 
-    {
+    if (inputFile == NULL) {
         printf("Error opening input file.\n");
         return;
     }
 
     FILE* outputFile = fopen(outputFilename, "wb");
-    if (outputFile == NULL) 
-    {
+    if (outputFile == NULL) {
         printf("Error opening output file.\n");
         fclose(inputFile);
         return;
@@ -794,75 +940,70 @@ void compressFile_intermediate(const char* inputFilename, TreeNode* root, Huffma
     saveHuffmanTreeAndCodeTable(root, table, ComFilename);
     fclose(ComFile);
 
-    char* buffer = (char*)malloc(BUFFER_SIZE);
-    if (!buffer) {
-        printf("Memory allocation failed.\n");
+    // Create a .txt file to store the number of padding bits
+    char paddingFilename[1024];
+    getPaddingFilename(inputFilename, paddingFilename);
+    FILE* paddingFile = fopen(paddingFilename, "w");
+    if (paddingFile == NULL) {
+        printf("Error opening padding bits file.\n");
         fclose(inputFile);
         fclose(outputFile);
         return;
     }
 
+    char* buffer = (char*)malloc(BUFFER_SIZE);
+    if (!buffer) {
+        printf("Memory allocation failed.\n");
+        fclose(inputFile);
+        fclose(outputFile);
+        fclose(paddingFile);
+        return;
+    }
+
+    char bitBuffer[Bit_compression_size + 1] = { 0 };
+    int bitIndex = 0;
+    unsigned char byte = 0;
+
     size_t bytesRead;
+    unsigned char paddingBits = 0;
+
     fseeko(inputFile, 0, SEEK_END);
     long long fileSize = ftello(inputFile);
     fseeko(inputFile, 0, SEEK_SET);
+
+    // for loading bar 
     int totalSteps = fileSize / BUFFER_SIZE + 1;
     int step = 0;
 
-    ThreadPool pool(std::thread::hardware_concurrency());
-    std::mutex mtx;
-
-    while ((bytesRead = fread(buffer, 1, BUFFER_SIZE, inputFile)) > 0) 
-    {
-        char* chunk = new char[bytesRead];
-        memcpy(chunk, buffer, bytesRead);
-
-        pool.enqueue([chunk, bytesRead, &outputFile, &table, &mtx] 
-            {
-            std::string localCompressed;
-            char bitBuffer[Bit_compression_size + 1];
-            bitBuffer[Bit_compression_size] = '\0';
-            int bitIndex = 0;
-
-            for (size_t i = 0; i < bytesRead; i++) 
-            {
-                unsigned char c = chunk[i];
-                const char* code = table->codes[c];
-                if (code != NULL) {
-                    for (size_t j = 0; j < strlen(code); j++) 
-                    {
-                        bitBuffer[bitIndex] = code[j];
-                        bitIndex++;
-                        if (bitIndex == Bit_compression_size) 
-                        {
-                            unsigned char byte = bitsToReadableAsciiChar(bitBuffer);
-                            localCompressed.push_back(byte);
-                            bitIndex = 0;
-                        }
+    while ((bytesRead = fread(buffer, 1, BUFFER_SIZE, inputFile)) > 0) {
+        for (size_t i = 0; i < bytesRead; i++) {
+            unsigned char c = buffer[i];
+            const char* code = table->codes[c];
+            if (code != NULL) {
+                for (size_t j = 0; j < strlen(code); j++) {
+                    if (code[j] == '1') {
+                        byte |= (1 << (7 - bitIndex));
+                    }
+                    bitIndex++;
+                    if (bitIndex == 8) {
+                        fputc(byte, outputFile);
+                        bitIndex = 0;
+                        byte = 0;
                     }
                 }
             }
-
-            if (bitIndex > 0) {
-                while (bitIndex < Bit_compression_size) 
-                {
-                    bitBuffer[bitIndex] = '0';
-                    bitIndex++;
-                }
-                unsigned char byte = bitsToReadableAsciiChar(bitBuffer);
-                localCompressed.push_back(byte);
-            }
-
-            delete[] chunk;
-
-            std::lock_guard<std::mutex> lock(mtx);
-            fwrite(localCompressed.data(), sizeof(unsigned char), localCompressed.size(), outputFile);
-            });
-
+        }
         updateLoadingBar(bar, static_cast<float>(++step) / totalSteps);
     }
 
-    pool.~ThreadPool();  // Ensure all tasks are finished before closing files
+    // Write any remaining bits as the last byte and calculate padding bits
+    if (bitIndex > 0) {
+        paddingBits = 8 - bitIndex;
+        fputc(byte, outputFile);
+    }
+
+    fprintf(paddingFile, "%u", paddingBits);
+    fclose(paddingFile);
 
     free(buffer);
     fclose(inputFile);
@@ -876,29 +1017,24 @@ void compressFile_intermediate(const char* inputFilename, TreeNode* root, Huffma
 
 
 
-
-// decompression code 
-void byteToBits(unsigned char byte, char* bits) 
+void byteToBits(unsigned char byte, char* bits)
 {
-    for (int i = Bit_compression_size - 1; i >= 0; i--) 
+    for (int i = 0; i < Bit_compression_size; i++)
     {
-        bits[i] = (byte & 1) ? '1' : '0';
-        byte >>= 1;
+        bits[i] = (byte & (1 << (Bit_compression_size - i - 1))) ? '1' : '0';
     }
 }
 
 void decompressFile(const char* inputFilename, const char* outputFilename, LoadingBar* bar)
 {
     FILE* inputFile = fopen(inputFilename, "rb");
-    if (inputFile == NULL) 
-    {
+    if (inputFile == NULL) {
         printf("Error opening input file.\n");
         return;
     }
 
     FILE* outputFile = fopen(outputFilename, "wb");
-    if (outputFile == NULL) 
-    {
+    if (outputFile == NULL) {
         printf("Error opening output file.\n");
         fclose(inputFile);
         return;
@@ -910,21 +1046,43 @@ void decompressFile(const char* inputFilename, const char* outputFilename, Loadi
 
     // Load the Huffman tree and code table from the .dat file
     FILE* ComFile = fopen(ComFilename, "rb");
-    if (ComFile == NULL) 
-    {
+    if (ComFile == NULL) {
         printf("Error opening .dat file to load Huffman tree and code table.\n");
         fclose(inputFile);
         fclose(outputFile);
         return;
     }
+
     TreeNode* root = loadHuffmanTree(ComFile);
     HuffmanCodeTable* table = loadHuffmanCodeTable(ComFile);
     fclose(ComFile);
 
-    // replace with char buffer
+    // Load the number of padding bits from the .txt file
+    char paddingFilename[1024];
+    getPaddingFilename(inputFilename, paddingFilename);
+    FILE* paddingFile = fopen(paddingFilename, "r");
+    if (paddingFile == NULL) {
+        printf("Error opening padding bits file.\n");
+        fclose(inputFile);
+        fclose(outputFile);
+        return;
+    }
+
+    unsigned char paddingBits;
+    fscanf(paddingFile, "%hhu", &paddingBits);
+    fclose(paddingFile);
+
+    // Get file size
+    fseeko(inputFile, 0, SEEK_END);
+    long long fileSize = ftello(inputFile);
+    fseeko(inputFile, 0, SEEK_SET);
+
+    // For loading bar 
+    int totalSteps = fileSize / BUFFER_SIZE + 1;
+    int step = 0;
+
     char* buffer = (char*)malloc(BUFFER_SIZE);
-    if (!buffer) 
-    {
+    if (!buffer) {
         printf("Memory allocation failed.\n");
         fclose(inputFile);
         fclose(outputFile);
@@ -934,37 +1092,29 @@ void decompressFile(const char* inputFilename, const char* outputFilename, Loadi
     size_t bytesRead;
     char bitBuffer[Bit_compression_size + 1];
     bitBuffer[Bit_compression_size] = '\0';
-    int bitIndex = 0;
+    size_t bitIndex = 0;
     TreeNode* currentNode = root;
+    long remainingBits = (fileSize * 8) - paddingBits; // Total bits minus padding bits
+    long processedBits = 0;
 
-    fseeko(inputFile, 0, SEEK_END);
-    long long fileSize = ftello(inputFile);
-    fseeko(inputFile, 0, SEEK_SET);
-    int totalSteps = fileSize / BUFFER_SIZE + 1;
-    int step = 0;
-
-    while ((bytesRead = fread(buffer, 1, BUFFER_SIZE, inputFile)) > 0) 
-    {
-        for (size_t i = 0; i < bytesRead; i++) 
-        {
+    while ((bytesRead = fread(buffer, 1, BUFFER_SIZE, inputFile)) > 0) {
+        for (size_t i = 0; i < bytesRead && processedBits < remainingBits; i++) {
             unsigned char byte = buffer[i];
             byteToBits(byte, bitBuffer);
 
-            for (int j = 0; j < Bit_compression_size; j++) 
-            {
-                if (bitBuffer[j] == '0') 
-                {
+            for (int j = 0; j < Bit_compression_size && processedBits < remainingBits; j++) {
+                if (bitBuffer[j] == '0') {
                     currentNode = currentNode->left;
                 }
                 else {
                     currentNode = currentNode->right;
                 }
 
-                if (currentNode->left == NULL && currentNode->right == NULL) 
-                {
+                if (currentNode->left == NULL && currentNode->right == NULL) {
                     fwrite(&currentNode->data, sizeof(char), 1, outputFile);
                     currentNode = root;
                 }
+                processedBits++;
             }
         }
         updateLoadingBar(bar, static_cast<float>(++step) / totalSteps);
@@ -975,23 +1125,20 @@ void decompressFile(const char* inputFilename, const char* outputFilename, Loadi
     printf("File '%s' decompressed to '%s'.\n", inputFilename, outputFilename);
 
     // Free the Huffman tree and code table
+    free(buffer);
     freeHuffmanTree(root);
     freeHuffmanCodeTable(table);
+    showCompletionScreen(outputFilename);
 }
 
 
 
-
-
-
 //function to load intro pic
-
-
-void mainLoop() 
+void mainLoop()
 {
     loadIntro();
     const char* filterPatterns[1] = { "*.txt" };
-    const char* filterPatterns1[1] = { "*_compressed.com" };
+    const char* filterPatterns1[1] = { "*_compressed.txt" };
     int frequencyTable[256] = { 0 };
 
     graphics.setup();
@@ -1002,14 +1149,14 @@ void mainLoop()
     bool fileCompressed = false;
     bool fileDecompressed = false;
 
-    while (running) 
+    while (running)
     {
         showWelcomeScreen();
 
-        if (GetAsyncKeyState('S') & 0x8000) 
+        if (GetAsyncKeyState('S') & 0x8000)
         {
             const char* inputFilename = "input.txt";
-            generateRandomTextFile(inputFilename, FILE_SIZE, &fileGenBar);
+            //generateRandomTextFile(inputFilename, FILE_SIZE, &fileGenBar);
             generateFrequencyTable(inputFilename, frequencyTable, &frequencyBar);
             TreeNode* root = buildHuffmanTree(frequencyTable);
 
@@ -1022,7 +1169,7 @@ void mainLoop()
             freeHuffmanTree(root);
             fileCompressed = true;
         }
-        else if (GetAsyncKeyState('C') & 0x8000) 
+        else if (GetAsyncKeyState('C') & 0x8000)
         {
             const char* inputFilename = tinyfd_openFileDialog(
                 "Select a text file",
@@ -1033,9 +1180,9 @@ void mainLoop()
                 0
             );
 
-            if (inputFilename) 
+            if (inputFilename)
             {
-                if (isTextFile(inputFilename)) 
+                if (isTextFile(inputFilename))
                 {
                     generateFrequencyTable(inputFilename, frequencyTable, &frequencyBar);
                     TreeNode* root = buildHuffmanTree(frequencyTable);
@@ -1049,7 +1196,7 @@ void mainLoop()
                     freeHuffmanTree(root);
                     fileCompressed = true;
                 }
-                else 
+                else
                 {
                     tinyfd_messageBox(
                         "Error",
@@ -1070,7 +1217,7 @@ void mainLoop()
                 );
             }
         }
-        else if (GetAsyncKeyState('D') & 0x8000) 
+        else if (GetAsyncKeyState('D') & 0x8000)
         {  // Decompression option
             const char* inputFilename = tinyfd_openFileDialog
             (
@@ -1082,16 +1229,16 @@ void mainLoop()
                 0
             );
 
-            if (inputFilename) 
+            if (inputFilename)
             {
-                if (isComFile(inputFilename)) 
+                if (isComFile(inputFilename))
                 {
-					char outputFilename[1024];
-					getOutputdecompress(inputFilename, outputFilename);
-					decompressFile(inputFilename, outputFilename, &compressionBar);
-					fileDecompressed = true;
+                    char outputFilename[1024];
+                    getOutputdecompress(inputFilename, outputFilename);
+                    decompressFile(inputFilename, outputFilename, &compressionBar);
+                    fileDecompressed = true;
                 }
-                else 
+                else
                 {
                     tinyfd_messageBox
                     (
@@ -1114,18 +1261,18 @@ void mainLoop()
                 );
             }
         }
-        else if (GetAsyncKeyState('Q') & 0x8000) 
+        else if (GetAsyncKeyState('Q') & 0x8000)
         {
             running = false;
         }
 
-        if (fileCompressed) 
+        if (fileCompressed)
         {
             fileCompressed = false;
             Sleep(10);
         }
 
-        if (fileDecompressed) 
+        if (fileDecompressed)
         {
             showCompletionScreen("decompressed_output.txt");
             fileDecompressed = false;
@@ -1136,8 +1283,132 @@ void mainLoop()
     graphics.showCursor();
 }
 
-int main() 
+void writeHuffmanEncodedFile(const char* inputFilename, HuffmanCodeTable* table, const char* encodedFilename) {
+    FILE* inputFile = fopen(inputFilename, "rb");
+    if (inputFile == NULL) {
+        printf("Error opening input file.\n");
+        return;
+    }
+
+    FILE* encodedFile = fopen(encodedFilename, "w");
+    if (encodedFile == NULL) {
+        printf("Error opening encoded file.\n");
+        fclose(inputFile);
+        return;
+    }
+
+    char* buffer = (char*)malloc(BUFFER_SIZE);
+    if (buffer == NULL) {
+        printf("Memory allocation failed.\n");
+        fclose(inputFile);
+        fclose(encodedFile);
+        return;
+    }
+
+    size_t bytesRead;
+
+    while ((bytesRead = fread(buffer, 1, BUFFER_SIZE, inputFile)) > 0) {
+        for (size_t i = 0; i < bytesRead; i++) {
+            unsigned char c = buffer[i];
+            const char* code = table->codes[c];
+            if (code != NULL) {
+                fprintf(encodedFile, "%s", code);
+            }
+        }
+    }
+
+    free(buffer);
+    fclose(inputFile);
+    fclose(encodedFile);
+
+    printf("Huffman encoded file written to '%s'.\n", encodedFilename);
+}
+
+void printHuffmanCodeTable(HuffmanCodeTable* table, const char* filename) {
+    FILE* file = fopen(filename, "w");
+    if (file == NULL) {
+        printf("Error opening file to print Huffman code table.\n");
+        return;
+    }
+
+    char* buffer = (char*)malloc(MAX_HUFFMAN_CODE_SIZE + 50); // Allocate enough space for the largest possible entry
+    if (buffer == NULL) {
+        printf("Memory allocation failed.\n");
+        fclose(file);
+        return;
+    }
+
+    for (int i = 0; i < 256; i++) {
+        if (table->codes[i] != NULL) {
+            snprintf(buffer, MAX_HUFFMAN_CODE_SIZE + 50, "%c: %s\n", i, table->codes[i]);
+            fprintf(file, "%s", buffer);
+        }
+    }
+
+    free(buffer);
+    fclose(file);
+}
+
+// Main function
+
+int main()
 {
-    mainLoop();
+    bool devmode = false;
+
+    if (!devmode)
+    {
+        mainLoop();
+        return 0;
+    }
+    const char* inputFilename = "input.txt";
+
+    // Initialize the frequency table
+    int frequencyTable[256] = { 0 };
+
+    // Generate the frequency table
+    generateFrequencyTable(inputFilename, frequencyTable, &frequencyBar);
+
+    // Build the Huffman tree
+    TreeNode* root = buildHuffmanTree(frequencyTable);
+    if (!root)
+    {
+        printf("Failed to build Huffman Tree. Exiting program.\n");
+        return -1; // Exit if tree construction failed
+    }
+
+    // Print Huffman codes to console
+    HuffmanCodeTable* table = generateHuffmanCodeTable(root);
+
+    printf("Huffman Codes:\n");
+    for (int i = 0; i < 256; i++)
+    {
+        if (table->codes[i] != NULL)
+        {
+            printf("Character: %c, Huffman Code: %s\n", i, table->codes[i]);
+        }
+    }
+
+    // Save the Huffman encoded  file
+
+    writeHuffmanEncodedFile(inputFilename, table, "huffman_encoded.txt");// correct
+
+    printHuffmanCodeTable(table, "huffman_codes.txt");// correct 
+
+    // Compress the input file using the Huffman codes
+
+    compressFile_intermediate(inputFilename, root, table, &compressionBar);
+
+
+    // Decompress the output file using the Huffman codes
+
+    const char* outputFilename = "input_compressed.txt";
+    decompressFile(outputFilename, "decompressed.txt", &compressionBar);
+
+    // Free the Huffman code table
+    freeHuffmanCodeTable(table);
+
+    // Free the Huffman Tree to prevent memory leaks
+    freeHuffmanTree(root);
+
     return 0;
 }
